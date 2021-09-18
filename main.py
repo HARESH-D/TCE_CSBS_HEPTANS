@@ -8,6 +8,8 @@ import cv2
 import os
 import json
 import numpy as np
+from keras.models import model_from_json
+from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 
 labels = ['hi', 'background']
 img_size = 64
@@ -16,8 +18,8 @@ img_size = 64
 def get_data(data_dir):
     data = []
     for label in labels:
-        
-        #path. join() method in Python join one or more path components intelligently       
+
+        #path. join() method in Python join one or more path components intelligently
         path = os.path.join(data_dir, label)
 
         #index() is an inbuilt function in Python, which searches for a given element
@@ -36,6 +38,7 @@ def get_data(data_dir):
 
 
 train = get_data(r"E:\dataset\training")
+
 
 X = []
 y = []
@@ -66,6 +69,13 @@ test_data.reshape(-1, img_size, img_size, 1)
 
 (X_train, X_test, y_train, y_test) = train_test_split(X, y, test_size=0.2, random_state=42)
 
+datagen = ImageDataGenerator(
+    vertical_flip=True,
+    horizontal_flip=True,
+    validation_split=0.2,
+    rotation_range=40 )
+
+datagen.fit(X_train)
 
 def create_model():
     model = Sequential()
@@ -104,8 +114,11 @@ def create_model():
 opt = Adam(lr=0.0001)
 model = create_model()
 
-
-history = model.fit(X, y, epochs=25, validation_data=(X_test, y_test))
+history = model.fit(datagen.flow(X_train, y_train, batch_size=32,
+         subset='training'),
+         validation_data=datagen.flow(X_train, y_train,
+         batch_size=64, subset='validation'),
+         epochs=50)
 
 
 # serialize model to JSON
@@ -116,13 +129,13 @@ with open("model.json", "w") as json_file:
 # serialize weights to HDF5
 model.save_weights("model.h5")
 print("Saved model to disk")
-
-from keras.models import model_from_json
+#
+#
 # load json and create model
-json_file = open('model.json', 'r')
+json_file = open('backup_models/model.json', 'r')
 loaded_model_json = json_file.read()
 json_file.close()
-
+#
 loaded_model = model_from_json(loaded_model_json)
 # load weights into new model
 loaded_model.load_weights("model.h5")
@@ -130,13 +143,12 @@ print("Loaded model from disk")
 
 # evaluate loaded model on test data
 loaded_model.compile(loss=tf.keras.losses.SparseCategoricalCrossentropy(), optimizer=opt, metrics=['accuracy'])
-predictions = list(loaded_model.predict_classes(test_data))
+predictions = loaded_model.predict_classes(test_data).tolist()
 print(predictions)
 # print(y_test)
 
 
 # from utils.io import write_json
-
 def write_json(filename, result):
     with open(filename, 'w') as outfile:
         json.dump(result, outfile)
@@ -146,6 +158,7 @@ def read_json(filename):
     with open(filename, 'r') as outfile:
         data =  json.load(outfile)
     return data
+
 
 def generate_sample_file(filename, x):
     res = {}
